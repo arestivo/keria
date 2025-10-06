@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kueria</title>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
+  <link href="kueria.css" rel="stylesheet"> 
+  <script src="kueria.js" defer></script>
+</head>
+<body class="bg-gray-50">
+  
+  <!-- Login Screen -->
+  <div id="loginScreen" class="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-8">
+    <div class="max-w-md mx-auto">
+      <div class="bg-white rounded-lg shadow-lg p-8">
+        <div class="flex items-center justify-center mb-6">
+          <svg class="w-16 h-16 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"></path>
+          </svg>
+        </div>
+        <h1 class="text-2xl font-bold text-center mb-6 text-gray-800">
+          Kueria
+        </h1>
+        
+        <div class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Username *</label>
+            <input type="text" id="username"
+              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          </div>
+          
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1">Password *</label>
+            <input type="password" id="password"
+              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
+          </div>
+          
+          <button onclick="handleConnect()" id="connectBtn"
+            class="w-full bg-indigo-600 text-white py-2 rounded-md hover:bg-indigo-700 transition font-medium">
+            Connect
+          </button>
+        </div>
+        
+        <div id="loginMessage" class="mt-4 hidden"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Interface -->
+  <div id="mainInterface" class="hidden min-h-screen">
+    <!-- Header -->
+    <div class="bg-indigo-600 text-white p-4 shadow-md">
+      <div class="max-w-7xl mx-auto flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4m0 5c0 2.21-3.582 4-8 4s-8-1.79-8-4"></path>
+          </svg>
+          <div>
+            <h1 class="text-xl font-bold">Kueria</h1>
+            <p class="text-sm text-indigo-200" id="connectionInfo"></p>
+          </div>
+        </div>
+        <button onclick="handleDisconnect()"
+          class="flex items-center gap-2 px-4 py-2 bg-indigo-700 hover:bg-indigo-800 rounded-md transition">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
+          </svg>
+          Disconnect
+        </button>
+      </div>
+    </div>
+
+    <div class="max-w-7xl mx-auto p-6">
+      <!-- Message Banner -->
+      <div id="messageBanner" class="mb-4 hidden"></div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+        <!-- Sidebar - Schema Management -->
+        <div class="lg:col-span-1">
+          <div class="bg-white rounded-lg shadow p-4">
+            <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+              </svg>
+              Schemas
+            </h2>
+            
+            <!-- Create Schema -->
+            <div class="mb-4">
+              <div class="flex gap-2">
+                <input type="text" id="newSchemaName" placeholder="New schema"
+                  class="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                <button onclick="handleCreateSchema()"
+                  class="p-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition"
+                  title="Create schema">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <!-- Schema List -->
+            <div id="schemaList" class="space-y-2"></div>
+          </div>
+
+          <!-- Tables List -->
+          <div class="bg-white rounded-lg shadow p-4 mt-4">
+            <h3 class="text-sm font-semibold mb-3 text-gray-700 flex items-center justify-between">
+              Tables
+              <button onclick="loadTables()" class="text-indigo-600 hover:text-indigo-800" title="Refresh tables">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path>
+                </svg>
+              </button>
+            </h3>
+            <div id="tablesList" class="space-y-1">
+              <p class="text-sm text-gray-500 text-center py-4">No tables</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Main Content - Query Editor -->
+        <div class="lg:col-span-3">
+          <div class="bg-white rounded-lg shadow p-4">
+            <div class="flex items-center justify-between mb-4">
+              <h2 class="text-lg font-semibold">Query Editor</h2>
+              <span class="text-sm text-gray-600">
+                Schema: <span class="font-medium text-indigo-600" id="currentSchema">public</span>
+              </span>
+            </div>
+
+            <textarea id="queryEditor" placeholder="Enter your SQL query here..."
+              class="w-full h-48 px-4 py-3 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 resize-none"></textarea>
+
+            <div class="mt-4 flex gap-3">
+              <button onclick="handleExecuteQuery()" id="executeBtn"
+                class="flex items-center gap-2 px-6 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition font-medium">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"></path>
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                </svg>
+                Execute Query
+              </button>
+              <button onclick="clearQuery()"
+                class="px-6 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 transition">
+                Clear
+              </button>
+            </div>
+          </div>
+
+          <!-- Query Results -->
+          <div id="resultsContainer" class="hidden bg-white rounded-lg shadow p-4 mt-6">
+            <div class="flex items-center justify-between mb-4">
+              <h2 class="text-lg font-semibold">Results</h2>
+              <span class="text-sm text-gray-600" id="resultsInfo"></span>
+            </div>
+
+            <div class="overflow-x-auto">
+              <table class="w-full text-sm" id="resultsTable"></table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
