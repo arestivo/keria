@@ -74,7 +74,7 @@ All administrative tasks are performed using the provided shell scripts from you
     ```sh
     ./scripts/delete-student.sh <student_username>
     ```
-    This action is irreversible[cite: 2].
+    This action is irreversible.
 
 * **Access a Student's Database Directly**
     If you need to inspect or manage a student's database directly via the command line, use:
