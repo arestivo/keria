@@ -3,6 +3,7 @@ require('dotenv').config();
 const express = require('express');
 const { Pool } = require('pg');
 const path = require('path');
+const crypto = require('crypto');
 const app = express();
 
 app.use(express.json());
@@ -11,7 +12,15 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
 
 // Store active connections per session
+// connections: Map<sessionId, { pool, username, createdAt, expiresAt }>
 const connections = new Map();
+
+// Session lifetime (ms)
+const SESSION_TTL = 1000 * 60 * 60; // 1 hour
+
+function isValidIdentifier(name) {
+  return typeof name === 'string' && /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name);
+}
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
@@ -43,12 +52,16 @@ app.post('/api/connect', async (req, res) => {
 
     // Test connection
     const client = await pool.connect();
+    // enforce reasonable timeouts for student queries on this session
+    await client.query('SET statement_timeout = 10000'); // 10s
+    await client.query('SET idle_in_transaction_session_timeout = 20000');
     await client.query('SELECT NOW()');
     client.release();
 
     // Generate session ID
-    const sessionId = Math.random().toString(36).substring(7) + Date.now();
-    connections.set(sessionId, pool);
+    const sessionId = crypto.randomBytes(32).toString('hex');
+    const now = Date.now();
+    connections.set(sessionId, { pool, username, createdAt: now, expiresAt: now + SESSION_TTL });
 
     res.json({ 
       success: true, 
@@ -57,66 +70,59 @@ app.post('/api/connect', async (req, res) => {
     });
   } catch (error) {
     console.error('Connection error:', error);
-    res.status(400).json({ 
-      success: false, 
-      error: error.message 
-    });
+    res.status(400).json({ success: false, error: 'Connection failed' });
   }
 });
 
 // Disconnect endpoint
 app.post('/api/disconnect', async (req, res) => {
   const { sessionId } = req.body;
-  const pool = connections.get(sessionId);
-  
-  if (pool) {
-    await pool.end();
+  const session = connections.get(sessionId);
+
+  if (session && session.pool) {
+    try { await session.pool.end(); } catch (e) { console.error('Error closing pool:', e); }
     connections.delete(sessionId);
   }
-  
+
   res.json({ success: true });
 });
 
 // Get schemas
 app.get('/api/schemas/:sessionId', async (req, res) => {
-  const pool = connections.get(req.params.sessionId);
-  
-  if (!pool) {
+  const session = connections.get(req.params.sessionId);
+  if (!session || !session.pool || session.expiresAt < Date.now()) {
     return res.status(401).json({ error: 'Not connected' });
   }
 
   try {
-    const result = await pool.query(`
+    const result = await session.pool.query(`
       SELECT schema_name 
       FROM information_schema.schemata 
       WHERE schema_name NOT IN ('pg_catalog', 'information_schema', 'pg_toast')
       ORDER BY schema_name
     `);
     
-    res.json({ 
-      success: true, 
-      schemas: result.rows.map(r => r.schema_name) 
-    });
+    res.json({ success: true, schemas: result.rows.map(r => r.schema_name) });
   } catch (error) {
     console.error('Get schemas error:', error);
-    res.status(400).json({ 
-      success: false, 
-      error: error.message 
-    });
+    res.status(400).json({ success: false, error: 'Failed to fetch schemas' });
   }
 });
 
 // Get tables for a schema
 app.get('/api/tables/:sessionId/:schemaName', async (req, res) => {
-  const pool = connections.get(req.params.sessionId);
+  const session = connections.get(req.params.sessionId);
   const { schemaName } = req.params;
-  
-  if (!pool) {
+  if (!session || !session.pool || session.expiresAt < Date.now()) {
     return res.status(401).json({ error: 'Not connected' });
   }
 
+  if (!isValidIdentifier(schemaName)) {
+    return res.status(400).json({ success: false, error: 'Invalid schema name' });
+  }
+
   try {
-    const result = await pool.query(`
+    const result = await session.pool.query(`
       SELECT 
         table_name,
         (SELECT COUNT(*) 
@@ -128,109 +134,103 @@ app.get('/api/tables/:sessionId/:schemaName', async (req, res) => {
       ORDER BY table_name
     `, [schemaName]);
     
-    res.json({ 
-      success: true, 
-      tables: result.rows 
-    });
+    res.json({ success: true, tables: result.rows });
   } catch (error) {
     console.error('Get tables error:', error);
-    res.status(400).json({ 
-      success: false, 
-      error: error.message 
-    });
+    res.status(400).json({ success: false, error: 'Failed to fetch tables' });
   }
 });
 
 // Create schema
 app.post('/api/schemas/:sessionId', async (req, res) => {
-  const pool = connections.get(req.params.sessionId);
+  const session = connections.get(req.params.sessionId);
   const { schemaName } = req.body;
-  
-  if (!pool) {
+  if (!session || !session.pool || session.expiresAt < Date.now()) {
     return res.status(401).json({ error: 'Not connected' });
   }
 
   try {
     // Sanitize schema name (only allow alphanumeric and underscore)
-    if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(schemaName)) {
-      throw new Error('Invalid schema name. Use only letters, numbers, and underscores.');
+    if (!isValidIdentifier(schemaName)) {
+      return res.status(400).json({ success: false, error: 'Invalid schema name. Use only letters, numbers, and underscores.' });
     }
 
-    // Use parameterized query with identifier
-    await pool.query(`CREATE SCHEMA "${schemaName}"`);
+    await session.pool.query(`CREATE SCHEMA "${schemaName}"`);
     
-    res.json({ 
-      success: true, 
-      message: `Schema "${schemaName}" created` 
-    });
+    res.json({ success: true, message: `Schema "${schemaName}" created` });
   } catch (error) {
     console.error('Create schema error:', error);
-    res.status(400).json({ 
-      success: false, 
-      error: error.message 
-    });
+    res.status(400).json({ success: false, error: 'Failed to create schema' });
   }
 });
 
 // Delete schema
 app.delete('/api/schemas/:sessionId/:schemaName', async (req, res) => {
-  const pool = connections.get(req.params.sessionId);
+  const session = connections.get(req.params.sessionId);
   const { schemaName } = req.params;
-  
-  if (!pool) {
+  if (!session || !session.pool || session.expiresAt < Date.now()) {
     return res.status(401).json({ error: 'Not connected' });
   }
 
   try {
     // Prevent deleting system schemas
     if (['public', 'pg_catalog', 'information_schema', 'pg_toast'].includes(schemaName)) {
-      throw new Error('Cannot delete system schema');
+      return res.status(400).json({ success: false, error: 'Cannot delete system schema' });
     }
 
-    await pool.query(`DROP SCHEMA "${schemaName}" CASCADE`);
+    if (!isValidIdentifier(schemaName)) {
+      return res.status(400).json({ success: false, error: 'Invalid schema name' });
+    }
+
+    await session.pool.query(`DROP SCHEMA "${schemaName}" CASCADE`);
     
-    res.json({ 
-      success: true, 
-      message: `Schema "${schemaName}" deleted` 
-    });
+    res.json({ success: true, message: `Schema "${schemaName}" deleted` });
   } catch (error) {
     console.error('Delete schema error:', error);
-    res.status(400).json({ 
-      success: false, 
-      error: error.message 
-    });
+    res.status(400).json({ success: false, error: 'Failed to delete schema' });
   }
 });
 
 // Execute query
 app.post('/api/query/:sessionId', async (req, res) => {
-  const pool = connections.get(req.params.sessionId);
+  const session = connections.get(req.params.sessionId);
   const { query, schema } = req.body;
-  
-  if (!pool) {
+
+  if (!session || !session.pool || session.expiresAt < Date.now()) {
     return res.status(401).json({ error: 'Not connected' });
   }
 
   if (!query || !query.trim()) {
-    return res.status(400).json({ 
-      success: false, 
-      error: 'Query cannot be empty' 
-    });
+    return res.status(400).json({ success: false, error: 'Query cannot be empty' });
+  }
+
+  // Basic blacklist for potentially dangerous operations (best-effort)
+  const dangerous = /(CREATE\s+FUNCTION|CREATE\s+EXTENSION|ALTER\s+SYSTEM|COPY\s+(TO|FROM)|\\\\.|pg_catalog|pg_read|pg_write)/i;
+  if (dangerous.test(query)) {
+    return res.status(400).json({ success: false, error: 'Query contains disallowed operations' });
+  }
+
+  if (schema && !isValidIdentifier(schema)) {
+    return res.status(400).json({ success: false, error: 'Invalid schema name' });
   }
 
   const startTime = Date.now();
-  const client = await pool.connect();
-  
+  const client = await session.pool.connect();
+
   try {
+    // enforce per-connection timeouts (re-applied for each acquired client)
+    await client.query('SET statement_timeout = 10000');
+    await client.query('SET idle_in_transaction_session_timeout = 20000');
+
     // Set the search_path to the selected schema if provided
     if (schema) {
       await client.query(`SET search_path TO "${schema}", public`);
     }
-    
+
     const result = await client.query(query);
     const executionTime = Date.now() - startTime;
-    
-    res.json({ 
+
+    res.json({
       success: true,
       columns: result.fields ? result.fields.map(f => f.name) : [],
       rows: result.rows,
@@ -240,10 +240,7 @@ app.post('/api/query/:sessionId', async (req, res) => {
     });
   } catch (error) {
     console.error('Query error:', error);
-    res.status(400).json({ 
-      success: false, 
-      error: error.message 
-    });
+    res.status(400).json({ success: false, error: 'Query failed' });
   } finally {
     client.release();
   }
@@ -270,3 +267,19 @@ app.listen(3000, '0.0.0.0', () => {
   console.log(`Server running on http://localhost:3000`);
   console.log(`PostgreSQL Connection: postgres:5432`);
 });
+
+// Periodic sweeper to close expired sessions
+setInterval(async () => {
+  const now = Date.now();
+  for (const [id, session] of connections.entries()) {
+    if (session && session.expiresAt && session.expiresAt < now) {
+      try {
+        await session.pool.end();
+      } catch (e) {
+        console.error('Error ending expired pool:', e);
+      }
+      connections.delete(id);
+      console.log('Expired session cleaned:', id);
+    }
+  }
+}, 1000 * 60 * 5); // every 5 minutes

@@ -8,14 +8,18 @@ if [ -z "$STUDENT" ]; then
   exit 1
 fi
 
+# Validate username
+if ! [[ "$STUDENT" =~ ^[a-z_][a-z0-9_]*$ ]]; then
+  echo "Invalid student username: $STUDENT"
+  exit 1
+fi
+
 # Drop the student's database if it exists
-docker exec -i keria_postgres psql -U postgres -d postgres -tAc \
-  "SELECT 1 FROM pg_database WHERE datname='${STUDENT}'" | grep -q 1 \
-  && docker exec -i keria_postgres psql -U postgres -d postgres \
-       -c "DROP DATABASE ${STUDENT};"
+docker exec -i keria_postgres psql -U postgres -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='${STUDENT}'" | grep -q 1 && docker exec -i keria_postgres psql -U postgres -d postgres <<SQL
+DROP DATABASE IF EXISTS "${STUDENT}";
+SQL
 
 # Drop the user if it exists
-docker exec -i keria_postgres psql -U postgres -d postgres -tAc \
-  "SELECT 1 FROM pg_roles WHERE rolname='${STUDENT}'" | grep -q 1 \
-  && docker exec -i keria_postgres psql -U postgres -d postgres \
-       -c "DROP USER ${STUDENT};"
+docker exec -i keria_postgres psql -U postgres -d postgres -tAc "SELECT 1 FROM pg_roles WHERE rolname='${STUDENT}'" | grep -q 1 && docker exec -i keria_postgres psql -U postgres -d postgres <<SQL
+DROP USER IF EXISTS "${STUDENT}";
+SQL
