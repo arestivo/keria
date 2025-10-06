@@ -1,5 +1,5 @@
 // API URL - relative path since we're serving from same server
-const API_URL = '/api';
+const API_URL = 'api';
 let sessionId = null;
 
 // State
