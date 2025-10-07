@@ -44,18 +44,6 @@ Object.assign(DOM, {
   resultsToggle: document.getElementById('resultsToggle')
 });
 
-// If CodeMirror init created a proxy on the textarea element, use it so existing code works
-(function attachCmProxy() {
-  try {
-    const el = document.getElementById('queryEditor');
-    if (el && el._cmProxy) {
-      DOM.queryEditor = el._cmProxy;
-    }
-  } catch (e) {
-    console.error('attachCmProxy failed:', e);
-  }
-})();
-
 // === Utility Helpers ===
 const UI = {
   showMessage(text, type, target = DOM.messageBanner) {
