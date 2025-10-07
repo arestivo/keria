@@ -22,6 +22,35 @@ function isValidIdentifier(name) {
   return typeof name === 'string' && /^[a-zA-Z_][a-zA-Z0-9_]*$/.test(name);
 }
 
+const TYPE_FRIENDLY = {
+  int2: 'smallint',
+  int4: 'integer',
+  int8: 'bigint',
+  float4: 'real',
+  float8: 'double precision',
+  numeric: 'numeric',
+  varchar: 'character varying',
+  bpchar: 'character',
+  text: 'text',
+  bool: 'boolean',
+  timestamp: 'timestamp without time zone',
+  timestamptz: 'timestamp with time zone',
+  date: 'date',
+  time: 'time without time zone',
+  timetz: 'time with time zone',
+  bytea: 'bytea',
+  json: 'json',
+  jsonb: 'jsonb',
+  uuid: 'uuid',
+  inet: 'inet',
+  cidr: 'cidr',
+  macaddr: 'macaddr',
+  bit: 'bit',
+  varbit: 'bit varying',
+  oid: 'oid',
+  interval: 'interval'
+};
+
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
@@ -245,7 +274,10 @@ app.post('/api/query/:sessionId', async (req, res) => {
             oids
           );
           for (const row of typeRes.rows) {
-            oidMap[parseInt(row.oid, 10)] = row.typname;
+            const oidNum = parseInt(row.oid, 10);
+            const rawName = String(row.typname || '').toLowerCase();
+            const friendly = TYPE_FRIENDLY[rawName] || row.typname;
+            oidMap[oidNum] = friendly;
           }
         } catch (e) {
           console.error('Error fetching type names:', e);
