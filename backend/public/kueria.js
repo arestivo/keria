@@ -353,16 +353,19 @@ function displayResults(data) {
 
   info.textContent = `${data.rowCount} rows • ${data.executionTime}`;
 
-  console.log(data)
-
-  // Build table header if columns are provided
   let html = '';
-  const cols = Array.isArray(data.columns) ? data.columns : (data.rows && data.rows.length > 0 ? Object.keys(data.rows[0]) : []);
+  let headerCols = [];
 
-  if (cols.length > 0) {
+  if (Array.isArray(data.columns) && data.columns.length > 0) {
+    headerCols = data.columns.map(c => ({ name: c.name, type: c.type || null, dataTypeID: c.dataTypeID || null }));
+  } 
+
+  if (headerCols.length > 0) {
     html += '<thead><tr class="bg-gray-50 border-b">';
-    cols.forEach(col => {
-      html += `<th class="px-4 py-3 text-left font-semibold text-gray-700">${escapeHtml(col)}</th>`;
+    headerCols.forEach(col => {
+      const titleText = col.type || (col.dataTypeID ? String(col.dataTypeID) : '');
+      const titleAttr = titleText ? ` title="${escapeHtml(titleText)}"` : '';
+      html += `<th class="px-4 py-3 text-left font-semibold text-gray-700"${titleAttr}>${escapeHtml(col.name)}</th>`;
     });
     html += '</tr></thead>';
   }
@@ -372,8 +375,8 @@ function displayResults(data) {
   if (data.rows && data.rows.length > 0) {
     data.rows.forEach(row => {
       html += '<tr class="border-b hover:bg-gray-50">';
-      cols.forEach(col => {
-        const value = row[col];
+      headerCols.forEach(col => {
+        const value = row[col.name];
         html += `<td class="px-4 py-3 text-gray-600">${
           value !== null && value !== undefined 
             ? escapeHtml(String(value)) 
@@ -384,7 +387,7 @@ function displayResults(data) {
     });
   } else {
     // No rows - show a single placeholder row that spans all columns (or one column if none available)
-    const span = Math.max(cols.length, 1);
+    const span = Math.max(headerCols.length, 1);
     html += `<tr class="border-b"><td class="px-4 py-3 text-gray-500 italic" colspan="${span}">No rows</td></tr>`;
   }
 

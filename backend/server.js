@@ -230,9 +230,38 @@ app.post('/api/query/:sessionId', async (req, res) => {
     const result = await client.query(query);
     const executionTime = Date.now() - startTime;
 
+    // Map PostgreSQL type OIDs to human-readable type names
+    let columns = [];
+    if (result.fields && result.fields.length > 0) {
+      const oids = [...new Set(result.fields.map(f => f.dataTypeID))];
+
+      // Query pg_type to get typname for these OIDs
+      const oidParams = oids.map((_, i) => `$${i + 1}`).join(',');
+      let oidMap = {};
+      if (oids.length > 0) {
+        try {
+          const typeRes = await client.query(
+            `SELECT oid, typname FROM pg_type WHERE oid IN (${oidParams})`,
+            oids
+          );
+          for (const row of typeRes.rows) {
+            oidMap[parseInt(row.oid, 10)] = row.typname;
+          }
+        } catch (e) {
+          console.error('Error fetching type names:', e);
+        }
+      }
+
+      columns = result.fields.map(f => ({
+        name: f.name,
+        dataTypeID: f.dataTypeID,
+        type: oidMap[f.dataTypeID] || null
+      }));
+    }
+
     res.json({
       success: true,
-      columns: result.fields ? result.fields.map(f => f.name) : [],
+      columns,
       rows: result.rows,
       rowCount: result.rowCount,
       executionTime: `${executionTime}ms`,
