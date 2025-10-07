@@ -1,9 +1,9 @@
-// API URL - relative path since we're serving from same server
+// === Constants ===
 const API_URL = 'api';
 let sessionId = null;
 
-// State
-let state = {
+// === State ===
+const state = {
   connected: false,
   credentials: {},
   schemas: [],
@@ -11,476 +11,388 @@ let state = {
   tables: []
 };
 
-// Initialize event listeners
-document.addEventListener('DOMContentLoaded', () => {
-  document.getElementById('newSchemaName').addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') handleCreateSchema();
-  });
-  
-  // Add Enter key support for login fields
-  document.getElementById('username').addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') handleConnect();
-  });
-  
-  document.getElementById('password').addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') handleConnect();
-  });
+// === DOM Cache ===
+const DOM = {
+  loginScreen: document.getElementById('loginScreen'),
+  mainInterface: document.getElementById('mainInterface'),
+  resultsContainer: document.getElementById('resultsContainer'),
+  connectionInfo: document.getElementById('connectionInfo'),
+  queryEditor: document.getElementById('queryEditor'),
+  executeBtn: document.getElementById('executeBtn'),
+  toggleBtn: document.getElementById('toggleMaximizeBtn'),
+  maximizeIcon: document.getElementById('maximizeIcon'),
+  topbar: document.getElementById('topbar'),
+  messageBanner: document.getElementById('messageBanner'),
+  loginMessage: document.getElementById('loginMessage'),
+  schemaList: document.getElementById('schemaList'),
+  tablesList: document.getElementById('tablesList'),
+  currentSchema: document.getElementById('currentSchema'),
+  resultsTable: document.getElementById('resultsTable'),
+  resultsInfo: document.getElementById('resultsInfo'),
+  username: document.getElementById('username'),
+  password: document.getElementById('password'),
+  connectBtn: document.getElementById('connectBtn'),
+  newSchemaName: document.getElementById('newSchemaName')
+};
 
-  // Maximize toggle button
-  const toggleBtn = document.getElementById('toggleMaximizeBtn');
-  if (toggleBtn) {
-    toggleBtn.addEventListener('click', () => toggleResultsMaximize());
-  }
-  // Escape to unmaximize
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
-      const container = document.getElementById('resultsContainer');
-      if (container && container.classList.contains('results-maximized')) {
-        setResultsMaximized(false);
-      }
+// === Utility Helpers ===
+const UI = {
+  showMessage(text, type, target = DOM.messageBanner) {
+    target.className = `mb-4 p-4 rounded-lg flex items-center gap-2 ${
+      type === 'error'
+        ? 'bg-red-50 text-red-700 border border-red-200'
+        : 'bg-green-50 text-green-700 border border-green-200'
+    }`;
+    target.textContent = text;
+    target.classList.remove('hidden');
+    setTimeout(() => target.classList.add('hidden'), 5000);
+  },
+
+  showLoginMessage(text, type) {
+    this.showMessage(text, type, DOM.loginMessage);
+  },
+
+  toggleButtonLoading(btn, loadingText, loading) {
+    if (!btn) return;
+    if (loading) {
+      btn.dataset.originalText = btn.innerHTML;
+      btn.innerHTML = loadingText;
+      btn.disabled = true;
+    } else {
+      btn.innerHTML = btn.dataset.originalText || btn.innerHTML;
+      btn.disabled = false;
     }
-  });
-});
+  },
 
-// Connection handling
-async function handleConnect() {
-  const username = document.getElementById('username').value;
-  const password = document.getElementById('password').value;
-
-  if (!username || !password) {
-    showLoginMessage('Please fill in username and password', 'error');
-    return;
+  escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
   }
+};
 
-  const btn = document.getElementById('connectBtn');
-  btn.textContent = 'Connecting...';
-  btn.disabled = true;
-
+// === Networking Helper ===
+async function apiFetch(path, options = {}) {
   try {
-    const response = await fetch(`${API_URL}/connect`, {
-      method: 'POST',
+    const response = await fetch(`${API_URL}/${path}`, {
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password })
+      ...options
     });
+    return await response.json();
+  } catch (err) {
+    throw new Error(err.message || 'Network error');
+  }
+}
 
-    const data = await response.json();
+// === Connection Management ===
+const ConnectionManager = {
+  async connect() {
+    const username = DOM.username.value.trim();
+    const password = DOM.password.value.trim();
 
-    if (data.success) {
+    if (!username || !password)
+      return UI.showLoginMessage('Please fill in username and password', 'error');
+
+    UI.toggleButtonLoading(DOM.connectBtn, 'Connecting...', true);
+
+    try {
+      const data = await apiFetch('connect', {
+        method: 'POST',
+        body: JSON.stringify({ username, password })
+      });
+
+      if (!data.success)
+        return UI.showLoginMessage(data.error || 'Connection failed', 'error');
+
       sessionId = data.sessionId;
       state.connected = true;
       state.credentials = { username };
-      
-      document.getElementById('loginScreen').classList.add('hidden');
-      document.getElementById('mainInterface').classList.remove('hidden');
-      document.getElementById('connectionInfo').textContent = 
-        `${username}@postgres/${username}`;
-      
-      await loadSchemas();
-      showMessage('Connected successfully!', 'success');
-    } else {
-      showLoginMessage(data.error || 'Connection failed', 'error');
-    }
-  } catch (error) {
-    console.error('Connection error:', error);
-    showLoginMessage('Connection failed: ' + error.message, 'error');
-  } finally {
-    btn.textContent = 'Connect';
-    btn.disabled = false;
-  }
-}
 
-async function handleDisconnect() {
-  if (sessionId) {
+      DOM.loginScreen.classList.add('hidden');
+      DOM.mainInterface.classList.remove('hidden');
+      DOM.connectionInfo.textContent = `${username}@postgres/${username}`;
+
+      await SchemaManager.loadSchemas();
+      UI.showMessage('Connected successfully!', 'success');
+    } catch (err) {
+      UI.showLoginMessage('Connection failed: ' + err.message, 'error');
+    } finally {
+      UI.toggleButtonLoading(DOM.connectBtn, 'Connect', false);
+    }
+  },
+
+  async disconnect() {
+    if (sessionId) {
+      try {
+        await apiFetch('disconnect', {
+          method: 'POST',
+          body: JSON.stringify({ sessionId })
+        });
+      } catch (err) {
+        console.error('Disconnect error:', err);
+      }
+    }
+
+    sessionId = null;
+    Object.assign(state, { connected: false, schemas: [], selectedSchema: 'public' });
+
+    DOM.mainInterface.classList.add('hidden');
+    DOM.loginScreen.classList.remove('hidden');
+    DOM.resultsContainer.classList.add('hidden');
+    DOM.queryEditor.value = '';
+    DOM.password.value = '';
+  }
+};
+
+// === Schema Management ===
+const SchemaManager = {
+  async loadSchemas() {
     try {
-      await fetch(`${API_URL}/disconnect`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sessionId })
-      });
-    } catch (error) {
-      console.error('Disconnect error:', error);
-    }
-  }
-  
-  sessionId = null;
-  state.connected = false;
-  state.schemas = [];
-  state.selectedSchema = 'public';
-  
-  document.getElementById('mainInterface').classList.add('hidden');
-  document.getElementById('loginScreen').classList.remove('hidden');
-  document.getElementById('resultsContainer').classList.add('hidden');
-  document.getElementById('queryEditor').value = '';
-  document.getElementById('password').value = '';
-}
+      const data = await apiFetch(`schemas/${sessionId}`);
+      if (!data.success) throw new Error(data.error);
 
-function showLoginMessage(text, type) {
-  const msgEl = document.getElementById('loginMessage');
-  msgEl.className = `mt-4 p-3 rounded-md flex items-center gap-2 ${
-    type === 'error' ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-700'
-  }`;
-  msgEl.textContent = text;
-  msgEl.classList.remove('hidden');
-  
-  setTimeout(() => {
-    msgEl.classList.add('hidden');
-  }, 5000);
-}
-
-// Schema management
-async function loadSchemas() {
-  try {
-    const response = await fetch(`${API_URL}/schemas/${sessionId}`);
-    const data = await response.json();
-    
-    if (data.success) {
       state.schemas = data.schemas;
-      renderSchemas();
-      await loadTables(); // Load tables for current schema
-    } else {
-      showMessage('Failed to load schemas: ' + data.error, 'error');
+      this.renderSchemas();
+      await TableManager.loadTables();
+    } catch (err) {
+      UI.showMessage('Failed to load schemas: ' + err.message, 'error');
     }
-  } catch (error) {
-    console.error('Load schemas error:', error);
-    showMessage('Failed to load schemas: ' + error.message, 'error');
-  }
-}
+  },
 
-// Load tables for current schema
-async function loadTables() {
-  try {
-    const response = await fetch(`${API_URL}/tables/${sessionId}/${state.selectedSchema}`);
-    const data = await response.json();
-    
-    if (data.success) {
-      state.tables = data.tables;
-      renderTables();
-    } else {
-      showMessage('Failed to load tables: ' + data.error, 'error');
-    }
-  } catch (error) {
-    console.error('Load tables error:', error);
-    showMessage('Failed to load tables: ' + error.message, 'error');
-  }
-}
+  async createSchema() {
+    const name = DOM.newSchemaName.value.trim();
+    if (!name) return UI.showMessage('Schema name cannot be empty', 'error');
 
-function renderTables() {
-  const list = document.getElementById('tablesList');
-  
-  if (state.tables.length === 0) {
-    list.innerHTML = '<p class="text-sm text-gray-500 text-center py-4">No tables</p>';
-    return;
-  }
-
-  list.innerHTML = state.tables.map(table => `
-    <button onclick="selectTable('${table.table_name}')"
-      class="w-full text-left text-xs px-3 py-2 bg-gray-50 hover:bg-indigo-50 rounded-md transition flex items-center justify-between group">
-      <span class="font-medium text-gray-700">${table.table_name}</span>
-      <span class="text-gray-400 text-xs">${table.column_count} cols</span>
-    </button>
-  `).join('');
-}
-
-async function selectTable(tableName) {
-  const query = `SELECT * FROM ${state.selectedSchema}.${tableName} LIMIT 100;`;
-  
-  // Execute the query automatically without changing the editor
-  await executeQueryDirect(query);
-}
-
-// Helper function to execute a query without button interaction
-async function executeQueryDirect(queryText) {
-  const btn = document.getElementById('executeBtn');
-  const originalHTML = btn.innerHTML;
-  btn.innerHTML = 'Executing...';
-  btn.disabled = true;
-
-  try {
-    const response = await fetch(`${API_URL}/query/${sessionId}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query: queryText, schema: state.selectedSchema })
-    });
-
-    const data = await response.json();
-
-    if (data.success) {
-      if (data.columns && data.columns.length > 0) {
-        displayResults(data);
-      } else if (data.rows && data.rows.length > 0) {
-        displayResults(data);
-      } else {
-        document.getElementById('resultsContainer').classList.add('hidden');
-        showMessage(`${data.command} completed successfully. ${data.rowCount} row(s) affected. Time: ${data.executionTime}`, 'success');
-      }
-      await loadTables();
-    } else {
-      showMessage('Query error: ' + data.error, 'error');
-      document.getElementById('resultsContainer').classList.add('hidden');
-    }
-  } catch (error) {
-    console.error('Execute query error:', error);
-    showMessage('Failed to execute query: ' + error.message, 'error');
-  } finally {
-    btn.innerHTML = originalHTML;
-    btn.disabled = false;
-  }
-}
-
-async function handleCreateSchema() {
-  const input = document.getElementById('newSchemaName');
-  const name = input.value.trim();
-
-  if (!name) {
-    showMessage('Schema name cannot be empty', 'error');
-    return;
-  }
-
-  try {
-    const response = await fetch(`${API_URL}/schemas/${sessionId}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ schemaName: name })
-    });
-
-    const data = await response.json();
-
-    if (data.success) {
-      input.value = '';
-      await loadSchemas();
-      selectSchema(name);
-      showMessage(data.message, 'success');
-    } else {
-      showMessage(data.error || 'Failed to create schema', 'error');
-    }
-  } catch (error) {
-    console.error('Create schema error:', error);
-    showMessage('Failed to create schema: ' + error.message, 'error');
-  }
-}
-
-async function handleDeleteSchema(schema) {
-  if (!confirm(`Delete schema "${schema}"? This will delete all tables and data. This cannot be undone.`)) {
-    return;
-  }
-
-  try {
-    const response = await fetch(`${API_URL}/schemas/${sessionId}/${schema}`, {
-      method: 'DELETE'
-    });
-
-    const data = await response.json();
-
-    if (data.success) {
-      await loadSchemas();
-      if (state.selectedSchema === schema) {
-        selectSchema('public');
-      }
-      showMessage(data.message, 'success');
-    } else {
-      showMessage(data.error || 'Failed to delete schema', 'error');
-    }
-  } catch (error) {
-    console.error('Delete schema error:', error);
-    showMessage('Failed to delete schema: ' + error.message, 'error');
-  }
-}
-
-function renderSchemas() {
-  const list = document.getElementById('schemaList');
-  list.innerHTML = state.schemas.map(schema => `
-    <div class="schema-item flex items-center justify-between p-2 rounded-md cursor-pointer transition ${
-      state.selectedSchema === schema
-        ? 'bg-indigo-50 border-2 border-indigo-500'
-        : 'bg-gray-50 hover:bg-gray-100 border-2 border-transparent'
-    }" onclick="selectSchema('${schema}')">
-      <span class="text-sm font-medium">${schema}</span>
-      ${!['public', 'pg_catalog', 'information_schema'].includes(schema) ? `
-        <button onclick="event.stopPropagation(); handleDeleteSchema('${schema}')"
-          class="p-1 text-red-600 hover:bg-red-50 rounded text-xl leading-none" title="Delete schema">
-          ×
-        </button>
-      ` : ''}
-    </div>
-  `).join('');
-}
-
-function selectSchema(schema) {
-  state.selectedSchema = schema;
-  document.getElementById('currentSchema').textContent = schema;
-  renderSchemas();
-  loadTables(); // Reload tables when schema changes
-}
-
-function clearQuery() {
-  document.getElementById('queryEditor').value = '';
-}
-
-// Query execution
-async function handleExecuteQuery() {
-  const query = document.getElementById('queryEditor').value.trim();
-
-  if (!query) {
-    showMessage('Query cannot be empty', 'error');
-    return;
-  }
-
-  const btn = document.getElementById('executeBtn');
-  const originalHTML = btn.innerHTML;
-  btn.innerHTML = 'Executing...';
-  btn.disabled = true;
-
-  try {
-    const response = await fetch(`${API_URL}/query/${sessionId}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query, schema: state.selectedSchema })
-    });
-
-    const data = await response.json();
-
-    if (data.success) {
-      if (data.rows && data.rows.length > 0) {
-        displayResults(data);
-      } else {
-        document.getElementById('resultsContainer').classList.add('hidden');
-        showMessage(`${data.command} completed successfully. ${data.rowCount} row(s) affected. Time: ${data.executionTime}`, 'success');
-      }
-      // Reload tables after query execution (in case tables were created/modified)
-      await loadTables();
-    } else {
-      showMessage('Query error: ' + data.error, 'error');
-      document.getElementById('resultsContainer').classList.add('hidden');
-    }
-  } catch (error) {
-    console.error('Execute query error:', error);
-    showMessage('Failed to execute query: ' + error.message, 'error');
-  } finally {
-    btn.innerHTML = originalHTML;
-    btn.disabled = false;
-  }
-}
-
-function displayResults(data) {
-  const container = document.getElementById('resultsContainer');
-  const table = document.getElementById('resultsTable');
-  const info = document.getElementById('resultsInfo');
-
-  info.textContent = `${data.rowCount} rows • ${data.executionTime}`;
-
-  let html = '';
-  let headerCols = [];
-
-  if (Array.isArray(data.columns) && data.columns.length > 0) {
-    headerCols = data.columns.map(c => ({ name: c.name, type: c.type || null, dataTypeID: c.dataTypeID || null }));
-  } 
-
-  if (headerCols.length > 0) {
-    html += '<thead><tr class="bg-gray-50 border-b">';
-    headerCols.forEach(col => {
-      const titleText = col.type || (col.dataTypeID ? String(col.dataTypeID) : '');
-      const titleAttr = titleText ? ` title="${escapeHtml(titleText)}"` : '';
-      html += `<th class="px-4 py-3 text-left font-semibold text-gray-700"${titleAttr}>${escapeHtml(col.name)}</th>`;
-    });
-    html += '</tr></thead>';
-  }
-
-  html += '<tbody>';
-
-  if (data.rows && data.rows.length > 0) {
-    data.rows.forEach(row => {
-      html += '<tr class="border-b hover:bg-gray-50">';
-      headerCols.forEach(col => {
-        const value = row[col.name];
-        html += `<td class="px-4 py-3 text-gray-600">${
-          value !== null && value !== undefined 
-            ? escapeHtml(String(value)) 
-            : '<i class="text-gray-400">NULL</i>'
-        }</td>`;
+    try {
+      const data = await apiFetch(`schemas/${sessionId}`, {
+        method: 'POST',
+        body: JSON.stringify({ schemaName: name })
       });
-      html += '</tr>';
-    });
-  } else {
-    const span = Math.max(headerCols.length, 1);
-    html += `<tr class="border-b"><td class="px-4 py-3 text-gray-500 italic" colspan="${span}">No rows</td></tr>`;
-  }
+      if (!data.success) throw new Error(data.error);
 
-  html += '</tbody>';
-
-  table.innerHTML = html;
-  container.classList.remove('hidden');
-}
-
-// Maximize / unmaximize helpers
-function toggleResultsMaximize() {
-  const container = document.getElementById('resultsContainer');
-  if (!container) return;
-  const isMax = container.classList.contains('results-maximized');
-  setResultsMaximized(!isMax);
-}
-
-function setResultsMaximized(maximize) {
-  const container = document.getElementById('resultsContainer');
-  const btn = document.getElementById('toggleMaximizeBtn');
-  const icon = document.getElementById('maximizeIcon');
-  if (!container || !btn || !icon) return;
-
-  if (maximize) {
-    container.classList.add('results-maximized');
-    document.body.classList.add('no-scroll');
-    // Compute top offset so the maximized container sits below the topbar
-    const topbar = document.getElementById('topbar');
-    let topPx = 16; // fallback
-    if (topbar) {
-      const rect = topbar.getBoundingClientRect();
-      // rect.bottom is relative to viewport; use that as top position
-      topPx = Math.ceil(rect.bottom) + 8; // small gap
+      DOM.newSchemaName.value = '';
+      await this.loadSchemas();
+      this.selectSchema(name);
+      UI.showMessage(data.message, 'success');
+    } catch (err) {
+      UI.showMessage('Failed to create schema: ' + err.message, 'error');
     }
-    // Apply inline positions (overrides CSS top/bottom)
-    container.style.top = topPx + 'px';
-    container.style.left = '1rem';
-    container.style.right = '1rem';
-    container.style.bottom = '1rem';
-    btn.setAttribute('title', 'Unmaximize results');
-    btn.setAttribute('aria-pressed', 'true');
-    // swap icon to a 'compress/minimize' FontAwesome glyph
-    icon.classList.remove('fa-expand', 'fa-square-up-right');
-    icon.classList.add('fa-compress');
-  } else {
-    container.classList.remove('results-maximized');
-    document.body.classList.remove('no-scroll');
-    btn.setAttribute('title', 'Maximize results');
-    btn.setAttribute('aria-pressed', 'false');
-  // restore maximize glyph
-  icon.classList.remove('fa-compress');
-  icon.classList.add('fa-expand');
-    // Clear inline positioning so original layout returns
-    container.style.top = '';
-    container.style.left = '';
-    container.style.right = '';
-    container.style.bottom = '';
+  },
+
+  async deleteSchema(schema) {
+    if (!confirm(`Delete schema "${schema}"? This cannot be undone.`)) return;
+    try {
+      const data = await apiFetch(`schemas/${sessionId}/${schema}`, { method: 'DELETE' });
+      if (!data.success) throw new Error(data.error);
+
+      await this.loadSchemas();
+      if (state.selectedSchema === schema) this.selectSchema('public');
+      UI.showMessage(data.message, 'success');
+    } catch (err) {
+      UI.showMessage('Failed to delete schema: ' + err.message, 'error');
+    }
+  },
+
+  renderSchemas() {
+    DOM.schemaList.innerHTML = state.schemas.map(schema => `
+      <div class="schema-item flex items-center justify-between p-2 rounded-md cursor-pointer transition ${
+        state.selectedSchema === schema
+          ? 'bg-indigo-50 border-2 border-indigo-500'
+          : 'bg-gray-50 hover:bg-gray-100 border-2 border-transparent'
+      }" onclick="SchemaManager.selectSchema('${schema}')">
+        <span class="text-sm font-medium">${schema}</span>
+        ${!['public','pg_catalog','information_schema'].includes(schema)
+          ? `<button onclick="event.stopPropagation(); SchemaManager.deleteSchema('${schema}')"
+               class="p-1 text-red-600 hover:bg-red-50 rounded text-xl leading-none" title="Delete schema">×</button>`
+          : ''}
+      </div>
+    `).join('');
+  },
+
+  selectSchema(schema) {
+    state.selectedSchema = schema;
+    DOM.currentSchema.textContent = schema;
+    this.renderSchemas();
+    TableManager.loadTables();
   }
-}
+};
 
-// Message handling
-function showMessage(text, type) {
-  const banner = document.getElementById('messageBanner');
-  banner.className = `mb-4 p-4 rounded-lg flex items-center gap-2 ${
-    type === 'error' 
-      ? 'bg-red-50 text-red-700 border border-red-200' 
-      : 'bg-green-50 text-green-700 border border-green-200'
-  }`;
-  banner.textContent = text;
-  banner.classList.remove('hidden');
+// === Table Management ===
+const TableManager = {
+  async loadTables() {
+    try {
+      const data = await apiFetch(`tables/${sessionId}/${state.selectedSchema}`);
+      if (!data.success) throw new Error(data.error);
 
-  setTimeout(() => {
-    banner.classList.add('hidden');
-  }, 5000);
-}
+      state.tables = data.tables;
+      this.renderTables();
+    } catch (err) {
+      UI.showMessage('Failed to load tables: ' + err.message, 'error');
+    }
+  },
 
-// Utility function
-function escapeHtml(text) {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
-}
+  renderTables() {
+    if (!state.tables.length)
+      return (DOM.tablesList.innerHTML =
+        '<p class="text-sm text-gray-500 text-center py-4">No tables</p>');
+
+    DOM.tablesList.innerHTML = state.tables.map(t => `
+      <button onclick="TableManager.selectTable('${t.table_name}')"
+        class="w-full text-left text-xs px-3 py-2 bg-gray-50 hover:bg-indigo-50 rounded-md transition flex items-center justify-between group">
+        <span class="font-medium text-gray-700">${t.table_name}</span>
+        <span class="text-gray-400 text-xs">${t.column_count} cols</span>
+      </button>`).join('');
+  },
+
+  async selectTable(name) {
+    const query = `SELECT * FROM ${state.selectedSchema}.${name} LIMIT 100;`;
+    await QueryManager.executeDirect(query);
+  }
+};
+
+// === Query Management ===
+const QueryManager = {
+  async execute() {
+    const query = DOM.queryEditor.value.trim();
+    if (!query) return UI.showMessage('Query cannot be empty', 'error');
+    await this._execute(query);
+  },
+
+  async executeDirect(query) {
+    await this._execute(query, true);
+  },
+
+  async _execute(query, silent = false) {
+    UI.toggleButtonLoading(DOM.executeBtn, 'Executing...', true);
+
+    try {
+      const data = await apiFetch(`query/${sessionId}`, {
+        method: 'POST',
+        body: JSON.stringify({ query, schema: state.selectedSchema })
+      });
+
+      if (!data.success) throw new Error(data.error);
+
+      if (data.columns?.length) {
+        this.displayResults(data);
+      } else {
+        DOM.resultsContainer.classList.add('hidden');
+        UI.showMessage(`${data.command} completed successfully. ${data.rowCount ?? 0} row(s) affected. Time: ${data.executionTime}`, 'success');
+      }
+      await TableManager.loadTables();
+    } catch (err) {
+      UI.showMessage('Query error: ' + err.message, 'error');
+      DOM.resultsContainer.classList.add('hidden');
+    } finally {
+      UI.toggleButtonLoading(DOM.executeBtn, 'Execute', false);
+    }
+  },
+
+  displayResults(data) {
+    const cols = (data.columns || []).map(c => ({
+      name: c.name,
+      type: c.type || null,
+      dataTypeID: c.dataTypeID || null
+    }));
+
+    const headerHTML = cols
+      .map(c => `<th class="px-4 py-3 text-left font-semibold text-gray-700" 
+        title="${UI.escapeHtml(c.type || String(c.dataTypeID) || '')}">
+        ${UI.escapeHtml(c.name)}</th>`)
+      .join('');
+
+    const rowsHTML = (data.rows || [])
+      .map(row => `
+        <tr class="border-b hover:bg-gray-50">
+          ${cols.map(c => {
+            const val = row[c.name];
+            return `<td class="px-4 py-3 text-gray-600">${
+              val != null ? UI.escapeHtml(String(val)) : '<i class="text-gray-400">NULL</i>'
+            }</td>`;
+          }).join('')}
+        </tr>`).join('') || 
+      `<tr><td class="px-4 py-3 text-gray-500 italic" colspan="${cols.length || 1}">No rows</td></tr>`;
+
+    DOM.resultsInfo.textContent = `${data.rowCount} rows • ${data.executionTime}`;
+    DOM.resultsTable.innerHTML = `<thead><tr class="bg-gray-50 border-b">${headerHTML}</tr></thead><tbody>${rowsHTML}</tbody>`;
+    DOM.resultsContainer.classList.remove('hidden');
+  }
+};
+
+// === Results Maximize Handling ===
+const ResultsView = {
+  toggle() {
+    const container = DOM.resultsContainer;
+    if (!container) return;
+    this.set(!container.classList.contains('results-maximized'));
+  },
+
+  set(maximize) {
+    const container = DOM.resultsContainer;
+    const btn = DOM.toggleBtn;
+    const icon = DOM.maximizeIcon;
+    if (!container || !btn || !icon) return;
+
+    if (maximize) {
+      container.classList.add('results-maximized');
+      document.body.classList.add('no-scroll');
+
+      const rect = DOM.topbar?.getBoundingClientRect();
+      const topPx = rect ? Math.ceil(rect.bottom) + 8 : 16;
+      Object.assign(container.style, {
+        top: `${topPx}px`,
+        left: '1rem',
+        right: '1rem',
+        bottom: '1rem'
+      });
+
+      btn.setAttribute('title', 'Unmaximize results');
+      btn.setAttribute('aria-pressed', 'true');
+      icon.classList.replace('fa-expand', 'fa-compress');
+    } else {
+      container.classList.remove('results-maximized');
+      document.body.classList.remove('no-scroll');
+      btn.setAttribute('title', 'Maximize results');
+      btn.setAttribute('aria-pressed', 'false');
+      icon.classList.replace('fa-compress', 'fa-expand');
+      Object.assign(container.style, { top: '', left: '', right: '', bottom: '' });
+    }
+  }
+};
+
+DOM.newSchemaName?.addEventListener('keypress', e => e.key === 'Enter' && SchemaManager.createSchema());
+DOM.username?.addEventListener('keypress', e => e.key === 'Enter' && ConnectionManager.connect());
+DOM.password?.addEventListener('keypress', e => e.key === 'Enter' && ConnectionManager.connect());
+DOM.toggleBtn?.addEventListener('click', () => ResultsView.toggle());
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && DOM.resultsContainer.classList.contains('results-maximized')) {
+    ResultsView.set(false);
+  }
+});
+
+document.getElementById("connectBtn")
+  ?.addEventListener("click", () => ConnectionManager.connect());
+
+document.getElementById("disconnectBtn")
+  ?.addEventListener("click", () => ConnectionManager.disconnect());
+
+document.getElementById("createSchemaBtn")
+  ?.addEventListener("click", () => SchemaManager.createSchema());
+
+document.getElementById("refreshTablesBtn")
+  ?.addEventListener("click", () => TableManager.loadTables());
+
+document.getElementById("executeBtn")
+  ?.addEventListener("click", () => QueryManager.execute());
+
+document.getElementById("clearQueryBtn")
+  ?.addEventListener("click", () => {
+    DOM.queryEditor.value = "";
+  });
+
+DOM.queryEditor?.addEventListener("keydown", (e) => {
+  if (e.ctrlKey && e.key === "Enter") QueryManager.execute();
+});
+
+DOM.resultsToggle?.addEventListener("click", () => ResultsView.toggle());
