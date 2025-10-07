@@ -35,6 +35,15 @@ const DOM = {
   newSchemaName: document.getElementById('newSchemaName')
 };
 
+// Additional DOM refs that are sometimes queried directly elsewhere
+Object.assign(DOM, {
+  disconnectBtn: document.getElementById('disconnectBtn'),
+  createSchemaBtn: document.getElementById('createSchemaBtn'),
+  refreshTablesBtn: document.getElementById('refreshTablesBtn'),
+  clearQueryBtn: document.getElementById('clearQueryBtn'),
+  resultsToggle: document.getElementById('resultsToggle')
+});
+
 // === Utility Helpers ===
 const UI = {
   showMessage(text, type, target = DOM.messageBanner) {
@@ -371,28 +380,12 @@ document.addEventListener('keydown', e => {
   }
 });
 
-document.getElementById("connectBtn")
-  ?.addEventListener("click", () => ConnectionManager.connect());
+DOM.connectBtn?.addEventListener("click", () => ConnectionManager.connect());
+DOM.disconnectBtn?.addEventListener("click", () => ConnectionManager.disconnect());
+DOM.createSchemaBtn?.addEventListener("click", () => SchemaManager.createSchema());
+DOM.refreshTablesBtn?.addEventListener("click", () => TableManager.loadTables());
+DOM.executeBtn?.addEventListener("click", () => QueryManager.execute());
+DOM.clearQueryBtn?.addEventListener("click", () => { if (DOM.queryEditor) DOM.queryEditor.value = ""; });
 
-document.getElementById("disconnectBtn")
-  ?.addEventListener("click", () => ConnectionManager.disconnect());
-
-document.getElementById("createSchemaBtn")
-  ?.addEventListener("click", () => SchemaManager.createSchema());
-
-document.getElementById("refreshTablesBtn")
-  ?.addEventListener("click", () => TableManager.loadTables());
-
-document.getElementById("executeBtn")
-  ?.addEventListener("click", () => QueryManager.execute());
-
-document.getElementById("clearQueryBtn")
-  ?.addEventListener("click", () => {
-    DOM.queryEditor.value = "";
-  });
-
-DOM.queryEditor?.addEventListener("keydown", (e) => {
-  if (e.ctrlKey && e.key === "Enter") QueryManager.execute();
-});
-
+DOM.queryEditor?.addEventListener("keydown", (e) => { if (e.ctrlKey && e.key === "Enter") QueryManager.execute();});
 DOM.resultsToggle?.addEventListener("click", () => ResultsView.toggle());
