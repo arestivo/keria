@@ -280,7 +280,25 @@ const QueryManager = {
         body: JSON.stringify({ query, schema: state.selectedSchema })
       });
 
-      if (!data.success) throw new Error(data.error);
+      // Assume server returns structured JSON; if success=false, render server-provided error fields
+      if (!data.success) {
+        // Consolidate error display into the top banner. Include message, detail and hint (but hide code/position).
+        const pieces = [];
+        if (data.message) pieces.push(data.message);
+        if (data.detail) pieces.push(data.detail);
+        if (data.hint) pieces.push('Hint: ' + data.hint);
+        if (data.timeout) pieces.push('(timeout)');
+
+        UI.showMessage('Query error: ' + pieces.join(' — '), 'error');
+        // Hide results panel; do not duplicate details there
+        DOM.resultsContainer.classList.add('hidden');
+        // If a position was provided, still move the caret silently
+        if (data.position && DOM.queryEditor) {
+          const posNum = parseInt(data.position, 10);
+          if (!Number.isNaN(posNum) && posNum > 0) setQueryEditorCaret(posNum - 1);
+        }
+        return;
+      }
 
       if (data.columns?.length) {
         this.displayResults(data);
@@ -290,7 +308,9 @@ const QueryManager = {
       }
       await TableManager.loadTables();
     } catch (err) {
-      UI.showMessage('Query error: ' + err.message, 'error');
+      // Network or unexpected error
+      console.error('Query request failed:', err);
+      UI.showMessage('Query error: ' + (err.message || String(err)), 'error');
       DOM.resultsContainer.classList.add('hidden');
     } finally {
       UI.toggleButtonLoading(DOM.executeBtn, 'Execute', false);
@@ -327,6 +347,35 @@ const QueryManager = {
     DOM.resultsContainer.classList.remove('hidden');
   }
 };
+
+// Render structured query error details returned by the server
+function renderQueryErrorDetails(err) {
+  // Errors are now shown in the top banner; keep this helper minimal: silently move caret if position provided.
+  if (err && err.position && DOM.queryEditor) {
+    const posNum = parseInt(err.position, 10);
+    if (!Number.isNaN(posNum) && posNum > 0) setQueryEditorCaret(posNum - 1);
+  }
+}
+
+// Set the caret position in the query editor (character index). If index out of range, place at end.
+function setQueryEditorCaret(index) {
+  try {
+    const el = DOM.queryEditor;
+    if (!el) return;
+    const text = el.value || '';
+    const idx = Math.max(0, Math.min(index, text.length));
+    el.focus();
+    // For modern browsers, set selection range
+    if (typeof el.setSelectionRange === 'function') {
+      el.setSelectionRange(idx, idx);
+    } else {
+      // Fallback: place cursor at end
+      el.value = text;
+    }
+  } catch (e) {
+    console.error('Failed to set query editor caret:', e);
+  }
+}
 
 // === Results Maximize Handling ===
 const ResultsView = {

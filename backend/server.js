@@ -300,8 +300,30 @@ app.post('/api/query/:sessionId', async (req, res) => {
       command: result.command
     });
   } catch (error) {
+    // Log full error server-side for debugging
     console.error('Query error:', error);
-    res.status(400).json({ success: false, error: 'Query failed' });
+
+    // Build a sanitized error payload for clients/students.
+    // Include common postgres error properties if present, but avoid exposing stack traces or internal details.
+    const clientError = {
+      success: false,
+      error: 'Query failed',
+      // Provide the short message from PG if available
+      message: error && error.message ? String(error.message) : undefined,
+      // PostgreSQL error code (eg. '42601' for syntax_error)
+      code: error && error.code ? String(error.code) : undefined,
+      // More detailed information PG may provide
+      detail: error && error.detail ? String(error.detail) : undefined,
+      hint: error && error.hint ? String(error.hint) : undefined,
+      position: error && (error.position || error.cursorPosition) ? String(error.position || error.cursorPosition) : undefined,
+      // Indicate if the error was a statement timeout
+      timeout: error && (error.code === '57014' || /statement timeout/i.test(error.message || '')) ? true : undefined
+    };
+
+    // Remove undefined fields so the client sees only present info
+    Object.keys(clientError).forEach(k => clientError[k] === undefined && delete clientError[k]);
+
+    res.status(400).json(clientError);
   } finally {
     client.release();
   }
