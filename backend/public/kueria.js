@@ -386,7 +386,6 @@ function displayResults(data) {
       html += '</tr>';
     });
   } else {
-    // No rows - show a single placeholder row that spans all columns (or one column if none available)
     const span = Math.max(headerCols.length, 1);
     html += `<tr class="border-b"><td class="px-4 py-3 text-gray-500 italic" colspan="${span}">No rows</td></tr>`;
   }
