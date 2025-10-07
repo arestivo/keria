@@ -2,3 +2,20 @@
 .schema-item { transition: all 0.2s; }
 .schema-item:hover { transform: translateX(2px); }
 textarea { font-family: 'Courier New', monospace; }
+
+/* Maximized results card */
+.results-maximized {
+	position: fixed;
+	top: 2rem;
+	left: 2rem;
+	right: 2rem;
+	bottom: 2rem;
+	z-index: 90;
+	overflow: auto;
+	padding: 1.5rem;
+}
+
+/* Prevent background content from scrolling when results are maximized */
+.no-scroll {
+	overflow: hidden;
+}

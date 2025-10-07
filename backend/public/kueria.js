@@ -25,6 +25,21 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('password').addEventListener('keypress', (e) => {
     if (e.key === 'Enter') handleConnect();
   });
+
+  // Maximize toggle button
+  const toggleBtn = document.getElementById('toggleMaximizeBtn');
+  if (toggleBtn) {
+    toggleBtn.addEventListener('click', () => toggleResultsMaximize());
+  }
+  // Escape to unmaximize
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      const container = document.getElementById('resultsContainer');
+      if (container && container.classList.contains('results-maximized')) {
+        setResultsMaximized(false);
+      }
+    }
+  });
 });
 
 // Connection handling
@@ -394,6 +409,55 @@ function displayResults(data) {
 
   table.innerHTML = html;
   container.classList.remove('hidden');
+}
+
+// Maximize / unmaximize helpers
+function toggleResultsMaximize() {
+  const container = document.getElementById('resultsContainer');
+  if (!container) return;
+  const isMax = container.classList.contains('results-maximized');
+  setResultsMaximized(!isMax);
+}
+
+function setResultsMaximized(maximize) {
+  const container = document.getElementById('resultsContainer');
+  const btn = document.getElementById('toggleMaximizeBtn');
+  const icon = document.getElementById('maximizeIcon');
+  if (!container || !btn || !icon) return;
+
+  if (maximize) {
+    container.classList.add('results-maximized');
+    document.body.classList.add('no-scroll');
+    // Compute top offset so the maximized container sits below the topbar
+    const topbar = document.getElementById('topbar');
+    let topPx = 16; // fallback
+    if (topbar) {
+      const rect = topbar.getBoundingClientRect();
+      // rect.bottom is relative to viewport; use that as top position
+      topPx = Math.ceil(rect.bottom) + 8; // small gap
+    }
+    // Apply inline positions (overrides CSS top/bottom)
+    container.style.top = topPx + 'px';
+    container.style.left = '1rem';
+    container.style.right = '1rem';
+    container.style.bottom = '1rem';
+    btn.setAttribute('title', 'Unmaximize results');
+    btn.setAttribute('aria-pressed', 'true');
+    // swap icon to a 'minimize' glyph
+    icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7h6M4 3h6v4M20 17h-6m6 4h-6v-4"/>';
+  } else {
+    container.classList.remove('results-maximized');
+    document.body.classList.remove('no-scroll');
+    btn.setAttribute('title', 'Maximize results');
+    btn.setAttribute('aria-pressed', 'false');
+    // restore maximize glyph
+    icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 3H5a2 2 0 00-2 2v3m13 13h3a2 2 0 002-2v-3M3 8l7-7m11 11l-7 7"/>';
+    // Clear inline positioning so original layout returns
+    container.style.top = '';
+    container.style.left = '';
+    container.style.right = '';
+    container.style.bottom = '';
+  }
 }
 
 // Message handling

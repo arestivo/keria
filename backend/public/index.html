@@ -49,8 +49,8 @@
 
   <!-- Main Interface -->
   <div id="mainInterface" class="hidden min-h-screen">
-    <!-- Header -->
-    <div class="bg-indigo-600 text-white p-4 shadow-md">
+  <!-- Header -->
+  <div id="topbar" class="bg-indigo-600 text-white p-4 shadow-md">
       <div class="max-w-7xl mx-auto flex items-center justify-between">
         <div class="flex items-center gap-3">
           <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -154,7 +154,15 @@
           <div id="resultsContainer" class="hidden bg-white rounded-lg shadow p-4 mt-6">
             <div class="flex items-center justify-between mb-4">
               <h2 class="text-lg font-semibold">Results</h2>
-              <span class="text-sm text-gray-600" id="resultsInfo"></span>
+              <div class="flex items-center gap-3">
+                <span class="text-sm text-gray-600" id="resultsInfo"></span>
+                <!-- Maximize toggle -->
+                <button id="toggleMaximizeBtn" class="p-1 rounded-md text-gray-600 hover:bg-gray-100" title="Maximize results" aria-pressed="false">
+                  <svg id="maximizeIcon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 3H5a2 2 0 00-2 2v3m13 13h3a2 2 0 002-2v-3M3 8l7-7m11 11l-7 7"/>
+                  </svg>
+                </button>
+              </div>
             </div>
 
             <div class="overflow-x-auto">
