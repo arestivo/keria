@@ -190,7 +190,9 @@ async function executeQueryDirect(queryText) {
     const data = await response.json();
 
     if (data.success) {
-      if (data.rows && data.rows.length > 0) {
+      if (data.columns && data.columns.length > 0) {
+        displayResults(data);
+      } else if (data.rows && data.rows.length > 0) {
         displayResults(data);
       } else {
         document.getElementById('resultsContainer').classList.add('hidden');
@@ -352,24 +354,41 @@ function displayResults(data) {
 
   info.textContent = `${data.rowCount} rows • ${data.executionTime}`;
 
-  let html = '<thead><tr class="bg-gray-50 border-b">';
-  data.columns.forEach(col => {
-    html += `<th class="px-4 py-3 text-left font-semibold text-gray-700">${escapeHtml(col)}</th>`;
-  });
-  html += '</tr></thead><tbody>';
+  console.log(data)
 
-  data.rows.forEach(row => {
-    html += '<tr class="border-b hover:bg-gray-50">';
-    data.columns.forEach(col => {
-      const value = row[col];
-      html += `<td class="px-4 py-3 text-gray-600">${
-        value !== null && value !== undefined 
-          ? escapeHtml(String(value)) 
-          : '<i class="text-gray-400">NULL</i>'
-      }</td>`;
+  // Build table header if columns are provided
+  let html = '';
+  const cols = Array.isArray(data.columns) ? data.columns : (data.rows && data.rows.length > 0 ? Object.keys(data.rows[0]) : []);
+
+  if (cols.length > 0) {
+    html += '<thead><tr class="bg-gray-50 border-b">';
+    cols.forEach(col => {
+      html += `<th class="px-4 py-3 text-left font-semibold text-gray-700">${escapeHtml(col)}</th>`;
     });
-    html += '</tr>';
-  });
+    html += '</tr></thead>';
+  }
+
+  html += '<tbody>';
+
+  if (data.rows && data.rows.length > 0) {
+    data.rows.forEach(row => {
+      html += '<tr class="border-b hover:bg-gray-50">';
+      cols.forEach(col => {
+        const value = row[col];
+        html += `<td class="px-4 py-3 text-gray-600">${
+          value !== null && value !== undefined 
+            ? escapeHtml(String(value)) 
+            : '<i class="text-gray-400">NULL</i>'
+        }</td>`;
+      });
+      html += '</tr>';
+    });
+  } else {
+    // No rows - show a single placeholder row that spans all columns (or one column if none available)
+    const span = Math.max(cols.length, 1);
+    html += `<tr class="border-b"><td class="px-4 py-3 text-gray-500 italic" colspan="${span}">No rows</td></tr>`;
+  }
+
   html += '</tbody>';
 
   table.innerHTML = html;
