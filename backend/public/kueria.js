@@ -198,7 +198,6 @@ async function executeQueryDirect(queryText) {
         document.getElementById('resultsContainer').classList.add('hidden');
         showMessage(`${data.command} completed successfully. ${data.rowCount} row(s) affected. Time: ${data.executionTime}`, 'success');
       }
-      // Reload tables after query execution (in case tables were created/modified)
       await loadTables();
     } else {
       showMessage('Query error: ' + data.error, 'error');
