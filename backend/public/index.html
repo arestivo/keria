@@ -7,6 +7,12 @@
   <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
   <link href="kueria.css" rel="stylesheet"> 
+  <style>
+    /* Minimal styling for CodeMirror container to match textarea look */
+    .cm-editor-wrapper { border: 1px solid #d1d5db; border-radius: 0.375rem; }
+    .cm-editor-wrapper .cm-editor { min-height: 12rem; }
+  </style>
+  <script type="module" src="cm-init.js" defer></script>
   <script src="kueria.js" defer></script>
 </head>
 <body class="bg-gray-50">
