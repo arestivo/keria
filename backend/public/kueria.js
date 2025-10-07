@@ -443,15 +443,17 @@ function setResultsMaximized(maximize) {
     container.style.bottom = '1rem';
     btn.setAttribute('title', 'Unmaximize results');
     btn.setAttribute('aria-pressed', 'true');
-    // swap icon to a 'minimize' glyph
-    icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7h6M4 3h6v4M20 17h-6m6 4h-6v-4"/>';
+    // swap icon to a 'compress/minimize' FontAwesome glyph
+    icon.classList.remove('fa-expand', 'fa-square-up-right');
+    icon.classList.add('fa-compress');
   } else {
     container.classList.remove('results-maximized');
     document.body.classList.remove('no-scroll');
     btn.setAttribute('title', 'Maximize results');
     btn.setAttribute('aria-pressed', 'false');
-    // restore maximize glyph
-    icon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 3H5a2 2 0 00-2 2v3m13 13h3a2 2 0 002-2v-3M3 8l7-7m11 11l-7 7"/>';
+  // restore maximize glyph
+  icon.classList.remove('fa-compress');
+  icon.classList.add('fa-expand');
     // Clear inline positioning so original layout returns
     container.style.top = '';
     container.style.left = '';
